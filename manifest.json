@@ -1,8 +1,8 @@
 {
   "id": "io.github.malom-ctrl.LanguageLearning",
   "name": "Language Learning",
-  "version": "0.2.2",
-  "compatibleAppVersion": ">=2.0.0",
+  "version": "0.2.3",
+  "compatibleAppVersion": ">=1.0.0",
   "description": "Translate selected text using MyMemory API.",
   "main": "main.js"
 }

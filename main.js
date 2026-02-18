@@ -1,6 +1,37 @@
 export function activate(context) {
   const { ui, data, app, reader } = context;
 
+  // 0. Inject Styles
+  const styleId = "plugin-translation-styles";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+            .translating {
+                animation: pulse-underline 1.5s infinite;
+                border-bottom: 2px solid var(--primary);
+                background: rgba(79, 70, 229, 0.1);
+                border-radius: 2px;
+            }
+            @keyframes pulse-underline {
+                0% { border-color: rgba(79, 70, 229, 0.3); }
+                50% { border-color: rgba(79, 70, 229, 1); }
+                100% { border-color: rgba(79, 70, 229, 0.3); }
+            }
+            .translated-text {
+                border-bottom: 2px dotted var(--primary);
+                cursor: help;
+                background-color: rgba(79, 70, 229, 0.05);
+                border-radius: 2px;
+                transition: background-color 0.2s;
+            }
+            .translated-text:hover {
+                background-color: rgba(79, 70, 229, 0.2);
+            }
+        `;
+    document.head.appendChild(style);
+  }
+
   // 1. Settings
   ui.settings.addSection("tab-general", "Translation", (container) => {
     const label = document.createElement("label");

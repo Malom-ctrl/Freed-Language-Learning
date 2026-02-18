@@ -77,14 +77,25 @@ export function activate(context) {
   // 2. Stats
   ui.stats.addSection((feed) => {
     const stats = feed.stats || {};
-    if (!stats.wordCountTranslated) return "";
+    const translated = stats.wordCountTranslated || 0;
+    if (translated === 0) return "";
+
+    const read = stats.wordCountRead || 0;
+    // Ensure denominator is at least equal to translated to avoid > 100% if data is slightly out of sync
+    const total = Math.max(read, translated);
     const pct =
-      stats.wordCountRead > 0
-        ? ((stats.wordCountTranslated / stats.wordCountRead) * 100).toFixed(1)
-        : 0;
-    return `<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:10px;">
-                   <strong>Translation Usage:</strong> ${pct}% of read words.
-                </div>`;
+      total > 0 ? Math.min(100, Math.round((translated / total) * 100)) : 0;
+
+    return `
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+                <div style="display:flex; justify-content:space-between; font-size: 0.9rem; margin-bottom: 6px;">
+                    <span>Translated Words</span>
+                    <span style="font-weight:600;">${translated} <span style="font-weight:400;color:var(--text-muted);font-size:0.8em">/ ${total} (${pct}%)</span></span>
+                </div>
+                <div style="width:100%; height:8px; background:var(--border); border-radius:4px; overflow:hidden;">
+                    <div style="width:${pct}%; height:100%; background:var(--primary);"></div>
+                </div>
+            </div>`;
   });
 
   // 3. Reader Tool

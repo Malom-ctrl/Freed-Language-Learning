@@ -108,62 +108,60 @@ export function activate(context) {
 
       const targetLang = localStorage.getItem("freed_target_lang") || "en";
 
-      const span = document.createElement("span");
-      span.className = "translating";
-      span.textContent = text;
-      range.deleteContents();
-      range.insertNode(span);
+      await ui.reader.createCAD("translation", async (selectedText) => {
+        try {
+          const lang = targetLang;
+          const pair = `Autodetect|${lang}`;
 
-      window.getSelection().removeAllRanges();
+          ui.toast("Translating...");
 
-      try {
-        const lang = targetLang;
-        const pair = `Autodetect|${lang}`;
+          const res = await fetch(
+            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedText)}&langpair=${pair}`,
+          );
+          const apiData = await res.json();
 
-        const res = await fetch(
-          `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`,
-        );
-        const apiData = await res.json();
+          const translatedText =
+            apiData.responseStatus === 200
+              ? apiData.responseData.translatedText
+              : null;
 
-        const translatedText =
-          apiData.responseStatus === 200
-            ? apiData.responseData.translatedText
-            : null;
+          if (translatedText) {
+            ui.toast("Translation ready");
 
-        if (translatedText) {
-          span.className = "translated-text";
-          span.setAttribute("data-tooltip", translatedText);
-          ui.toast("Translation ready");
-
-          if (span.matches(":hover")) {
-            ui.tooltip.show(span, translatedText);
-          }
-
-          await reader.saveContent();
-
-          // Update Stats using Generic API
-          const guid = reader.getCurrentGuid();
-          if (guid) {
-            const article = await data.getArticle(guid);
-            if (article && article.feedId) {
-              const wordCount = text.trim().split(/\s+/).length;
-              await data.stats.update(
-                article.feedId,
-                "wordCountTranslated",
-                wordCount,
-              );
-              app.refresh();
+            // Update Stats
+            const guid = reader.getCurrentGuid();
+            if (guid) {
+              const article = await data.getArticle(guid);
+              if (article && article.feedId) {
+                const wordCount = selectedText.trim().split(/\s+/).length;
+                await data.stats.update(
+                  article.feedId,
+                  "wordCountTranslated",
+                  wordCount,
+                );
+                app.refresh();
+              }
             }
+
+            return {
+              translatedText: translatedText,
+              targetLang: targetLang,
+            };
+          } else {
+            throw new Error("Empty response");
           }
-        } else {
-          throw new Error("Empty response");
+        } catch (error) {
+          console.error("Translation failed", error);
+          ui.toast("Translation failed.");
+          return null; // Cancel CAD creation
         }
-      } catch (error) {
-        console.error("Translation failed", error);
-        const parent = span.parentNode;
-        parent.replaceChild(document.createTextNode(text), span);
-        ui.toast("Translation failed.");
-      }
+      });
     },
+  });
+
+  // 4. Register CAD Renderer
+  ui.reader.addCADRenderer("translation", (content, data) => {
+    const translated = data.data?.translatedText || "Translation unavailable";
+    return `<span class="translated-text" data-tooltip="${translated}" data-cad-id="${data.id}">${content}</span>`;
   });
 }

@@ -1,5 +1,5 @@
 export function activate(context) {
-  const { ui, data, app, reader } = context;
+  const { ui, data, app, reader, storage } = context;
 
   // 0. Inject Styles
   const styleId = "plugin-translation-styles";
@@ -27,6 +27,61 @@ export function activate(context) {
             }
             .translated-text:hover {
                 background-color: rgba(79, 70, 229, 0.2);
+            }
+            /* Quiz Styles */
+            .quiz-container {
+                padding: 10px;
+            }
+            .quiz-card {
+                background: var(--bg-card);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 20px;
+                text-align: center;
+                margin-top: 20px;
+            }
+            .quiz-question {
+                font-size: 1.2rem;
+                font-weight: 600;
+                margin-bottom: 20px;
+                color: var(--text-main);
+            }
+            .quiz-input {
+                width: 100%;
+                padding: 10px;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                margin-bottom: 16px;
+                font-size: 1rem;
+                background: var(--bg-body);
+                color: var(--text-main);
+            }
+            .quiz-feedback {
+                margin-top: 16px;
+                padding: 10px;
+                border-radius: 6px;
+                font-weight: 500;
+            }
+            .quiz-feedback.correct {
+                background: rgba(16, 185, 129, 0.1);
+                color: #10b981;
+            }
+            .quiz-feedback.incorrect {
+                background: rgba(239, 68, 68, 0.1);
+                color: #ef4444;
+            }
+            .quiz-controls {
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+            }
+            .quiz-settings {
+                margin-bottom: 20px;
+                padding-bottom: 20px;
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                gap: 20px;
+                flex-wrap: wrap;
             }
         `;
     document.head.appendChild(style);
@@ -81,7 +136,6 @@ export function activate(context) {
     if (translated === 0) return "";
 
     const read = stats.wordCountRead || 0;
-    // Ensure denominator is at least equal to translated to avoid > 100% if data is slightly out of sync
     const total = Math.max(read, translated);
     const pct =
       total > 0 ? Math.min(100, Math.round((translated / total) * 100)) : 0;
@@ -128,6 +182,28 @@ export function activate(context) {
           if (translatedText) {
             ui.toast("Translation ready");
 
+            // Save Translation for Quiz
+            try {
+              const translations = (await storage.get("translations")) || [];
+              // Avoid duplicates (simple check)
+              const exists = translations.some(
+                (t) =>
+                  t.original === selectedText &&
+                  t.translated === translatedText,
+              );
+              if (!exists) {
+                translations.push({
+                  original: selectedText,
+                  translated: translatedText,
+                  lang: targetLang,
+                  date: Date.now(),
+                });
+                await storage.set("translations", translations);
+              }
+            } catch (err) {
+              console.error("Failed to save translation for quiz", err);
+            }
+
             // Update Stats
             const guid = reader.getCurrentGuid();
             if (guid) {
@@ -164,4 +240,164 @@ export function activate(context) {
     const translated = data.data?.translatedText || "Translation unavailable";
     return `<span class="translated-text" data-tooltip="${translated}" data-cad-id="${data.id}">${content}</span>`;
   });
+
+  // 5. Add Sidebar Item
+  ui.sidebar.addPrimary({
+    id: "quiz",
+    label: "Language Quiz",
+    icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>',
+    onClick: () => {
+      app.switchFeed("custom:quiz");
+    },
+  });
+
+  // 6. Register Custom View
+  ui.addView("quiz", "Language Quiz", (container) => {
+    container.classList.add("quiz-view");
+    renderQuizContent(container, storage, ui);
+  });
+}
+
+async function renderQuizContent(container, storage, ui) {
+  container.innerHTML = "";
+
+  // Load Settings
+  const strictness = (await storage.get("quiz_strictness")) !== false; // Default true
+  const mode = (await storage.get("quiz_mode")) || "original_to_translated"; // or translated_to_original
+
+  // Header / Settings
+  const settingsDiv = document.createElement("div");
+  settingsDiv.className = "quiz-settings";
+  settingsDiv.style.maxWidth = "600px";
+  settingsDiv.style.margin = "0 auto 20px auto";
+
+  settingsDiv.innerHTML = `
+        <div style="flex:1">
+            <label style="font-weight:600; display:block; margin-bottom:4px">Mode</label>
+            <select id="quiz-mode-select" style="width:100%">
+                <option value="original_to_translated" ${mode === "original_to_translated" ? "selected" : ""}>Original → Translated</option>
+                <option value="translated_to_original" ${mode === "translated_to_original" ? "selected" : ""}>Translated → Original</option>
+            </select>
+        </div>
+        <div style="flex:1">
+             <label style="font-weight:600; display:block; margin-bottom:4px">Validation</label>
+             <label style="display:flex; align-items:center; gap:8px; margin-top:8px">
+                <input type="checkbox" id="quiz-strictness-check" ${strictness ? "checked" : ""}>
+                Strict Matching (Accents)
+             </label>
+        </div>
+    `;
+  container.appendChild(settingsDiv);
+
+  // Event Listeners for Settings
+  settingsDiv.querySelector("#quiz-mode-select").onchange = async (e) => {
+    await storage.set("quiz_mode", e.target.value);
+    loadQuestion();
+  };
+  settingsDiv.querySelector("#quiz-strictness-check").onchange = async (e) => {
+    await storage.set("quiz_strictness", e.target.checked);
+  };
+
+  // Quiz Area
+  const quizArea = document.createElement("div");
+  quizArea.className = "quiz-container";
+  quizArea.style.maxWidth = "600px";
+  quizArea.style.margin = "0 auto";
+  container.appendChild(quizArea);
+
+  const translations = (await storage.get("translations")) || [];
+
+  if (translations.length === 0) {
+    quizArea.innerHTML = `<div style="text-align:center; color:var(--text-muted); margin-top:40px;">
+            No translations saved yet. Use the Translate tool in the reader to build your vocabulary!
+        </div>`;
+    return;
+  }
+
+  let currentItem = null;
+
+  const loadQuestion = async () => {
+    const currentMode =
+      (await storage.get("quiz_mode")) || "original_to_translated";
+    // Pick random
+    currentItem = translations[Math.floor(Math.random() * translations.length)];
+
+    const questionText =
+      currentMode === "original_to_translated"
+        ? currentItem.original
+        : currentItem.translated;
+
+    quizArea.innerHTML = `
+            <div style="text-align:center; margin-bottom:10px; color:var(--text-muted)">
+                Total Entries: ${translations.length}
+            </div>
+            <div class="quiz-card">
+                <div class="quiz-question">${questionText}</div>
+                <input type="text" class="quiz-input" placeholder="Type your answer..." autocomplete="off">
+                <div class="quiz-controls">
+                    <button class="btn btn-outline" id="btn-skip">Skip</button>
+                    <button class="btn btn-primary" id="btn-check">Check</button>
+                </div>
+                <div class="quiz-feedback" style="display:none"></div>
+            </div>
+        `;
+
+    const input = quizArea.querySelector("input");
+    const btnCheck = quizArea.querySelector("#btn-check");
+    const btnSkip = quizArea.querySelector("#btn-skip");
+    const feedback = quizArea.querySelector(".quiz-feedback");
+
+    input.focus();
+
+    const checkAnswer = async () => {
+      const userAns = input.value.trim();
+      if (!userAns) return;
+
+      const isStrict = (await storage.get("quiz_strictness")) !== false;
+      const targetAns =
+        currentMode === "original_to_translated"
+          ? currentItem.translated
+          : currentItem.original;
+
+      let correct = false;
+      if (isStrict) {
+        correct = userAns.toLowerCase() === targetAns.toLowerCase();
+      } else {
+        // Remove accents
+        const normalize = (str) =>
+          str
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+        correct = normalize(userAns) === normalize(targetAns);
+      }
+
+      feedback.style.display = "block";
+      if (correct) {
+        feedback.className = "quiz-feedback correct";
+        feedback.textContent = "Correct! Great job.";
+        btnCheck.textContent = "Next";
+        btnCheck.onclick = loadQuestion;
+        btnSkip.style.display = "none";
+      } else {
+        feedback.className = "quiz-feedback incorrect";
+        feedback.innerHTML = `Incorrect. The answer was: <br><strong>${targetAns}</strong>`;
+        btnCheck.textContent = "Next";
+        btnCheck.onclick = loadQuestion;
+        btnSkip.style.display = "none";
+      }
+    };
+
+    btnCheck.onclick = checkAnswer;
+    btnSkip.onclick = loadQuestion;
+
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") {
+        if (btnCheck.textContent === "Next") loadQuestion();
+        else checkAnswer();
+      }
+    };
+  };
+
+  loadQuestion();
 }

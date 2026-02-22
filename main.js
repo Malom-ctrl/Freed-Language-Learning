@@ -30,37 +30,53 @@ export function activate(context) {
             }
             /* Quiz Styles */
             .quiz-container {
-                padding: 10px;
+                padding: 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 60vh;
             }
             .quiz-card {
                 background: var(--bg-card);
                 border: 1px solid var(--border);
-                border-radius: 8px;
-                padding: 20px;
+                border-radius: 16px;
+                padding: 40px;
                 text-align: center;
                 margin-top: 20px;
+                width: 100%;
+                max-width: 600px;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             }
             .quiz-question {
-                font-size: 1.2rem;
-                font-weight: 600;
-                margin-bottom: 20px;
+                font-size: 2rem;
+                font-weight: 700;
+                margin-bottom: 30px;
                 color: var(--text-main);
+                line-height: 1.2;
             }
             .quiz-input {
                 width: 100%;
-                padding: 10px;
-                border: 1px solid var(--border);
-                border-radius: 6px;
-                margin-bottom: 16px;
-                font-size: 1rem;
+                padding: 16px;
+                border: 2px solid var(--border);
+                border-radius: 12px;
+                margin-bottom: 24px;
+                font-size: 1.2rem;
                 background: var(--bg-body);
                 color: var(--text-main);
+                text-align: center;
+                transition: border-color 0.2s;
+            }
+            .quiz-input:focus {
+                border-color: var(--primary);
+                outline: none;
             }
             .quiz-feedback {
-                margin-top: 16px;
-                padding: 10px;
-                border-radius: 6px;
-                font-weight: 500;
+                margin-top: 24px;
+                padding: 16px;
+                border-radius: 12px;
+                font-weight: 600;
+                font-size: 1.1rem;
             }
             .quiz-feedback.correct {
                 background: rgba(16, 185, 129, 0.1);
@@ -72,23 +88,55 @@ export function activate(context) {
             }
             .quiz-controls {
                 display: flex;
-                gap: 10px;
+                gap: 16px;
                 justify-content: center;
             }
-            .quiz-settings {
-                margin-bottom: 20px;
-                padding-bottom: 20px;
-                border-bottom: 1px solid var(--border);
+            .quiz-controls .btn {
+                padding: 12px 24px;
+                font-size: 1rem;
+            }
+            /* Toggle Switch Styles */
+            .quiz-mode-toggle {
                 display: flex;
-                gap: 20px;
-                flex-wrap: wrap;
+                background: var(--bg-card);
+                border: 1px solid var(--border);
+                border-radius: 9999px;
+                padding: 4px;
+                margin-bottom: 30px;
+                position: relative;
+                cursor: pointer;
+                user-select: none;
+            }
+            .quiz-mode-option {
+                padding: 8px 20px;
+                border-radius: 9999px;
+                font-size: 0.9rem;
+                font-weight: 600;
+                color: var(--text-muted);
+                z-index: 2;
+                transition: color 0.2s;
+            }
+            .quiz-mode-option.active {
+                color: var(--text-main);
+            }
+            .quiz-mode-indicator {
+                position: absolute;
+                top: 4px;
+                bottom: 4px;
+                left: 4px;
+                width: 50%; /* Approximate, will calculate */
+                background: var(--bg-body);
+                border-radius: 9999px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                transition: transform 0.2s ease;
+                z-index: 1;
             }
         `;
     document.head.appendChild(style);
   }
 
-  // 1. Settings
-  ui.settings.addSection("tab-general", "Translation", (container) => {
+  // 1. Settings (Target Language)
+  ui.settings.addSection("tab-general", "Translation", async (container) => {
     const label = document.createElement("label");
     label.textContent = "Target Language";
     label.style.display = "block";
@@ -118,15 +166,39 @@ export function activate(context) {
     select.innerHTML = langs
       .map((l) => `<option value="${l.code}">${l.name}</option>`)
       .join("");
-    const saved = localStorage.getItem("freed_target_lang") || "en";
+
+    const saved = (await storage.get("target_lang")) || "en";
     select.value = saved;
 
-    select.onchange = (e) => {
-      localStorage.setItem("freed_target_lang", e.target.value);
+    select.onchange = async (e) => {
+      await storage.set("target_lang", e.target.value);
     };
 
     container.appendChild(label);
     container.appendChild(select);
+
+    // Strictness Setting
+    const strictLabel = document.createElement("label");
+    strictLabel.style.display = "flex";
+    strictLabel.style.alignItems = "center";
+    strictLabel.style.gap = "8px";
+    strictLabel.style.marginTop = "16px";
+    strictLabel.style.fontWeight = "600";
+    strictLabel.style.color = "var(--text-muted)";
+
+    const strictCheck = document.createElement("input");
+    strictCheck.type = "checkbox";
+    strictCheck.checked = (await storage.get("quiz_strictness")) !== false; // Default true
+
+    strictCheck.onchange = async (e) => {
+      await storage.set("quiz_strictness", e.target.checked);
+    };
+
+    strictLabel.appendChild(strictCheck);
+    strictLabel.appendChild(
+      document.createTextNode("Strict Quiz Matching (Accents)"),
+    );
+    container.appendChild(strictLabel);
   });
 
   // 2. Stats
@@ -160,7 +232,7 @@ export function activate(context) {
     onClick: async (text, range) => {
       if (!text) return;
 
-      const targetLang = localStorage.getItem("freed_target_lang") || "en";
+      const targetLang = (await storage.get("target_lang")) || "en";
 
       await ui.reader.createCAD("translation", async (selectedText) => {
         try {
@@ -262,57 +334,70 @@ async function renderQuizContent(container, storage, ui) {
   container.innerHTML = "";
 
   // Load Settings
-  const strictness = (await storage.get("quiz_strictness")) !== false; // Default true
   const mode = (await storage.get("quiz_mode")) || "original_to_translated"; // or translated_to_original
 
-  // Header / Settings
-  const settingsDiv = document.createElement("div");
-  settingsDiv.className = "quiz-settings";
-  settingsDiv.style.maxWidth = "600px";
-  settingsDiv.style.margin = "0 auto 20px auto";
+  // Quiz Container
+  const quizContainer = document.createElement("div");
+  quizContainer.className = "quiz-container";
+  container.appendChild(quizContainer);
 
-  settingsDiv.innerHTML = `
-        <div style="flex:1">
-            <label style="font-weight:600; display:block; margin-bottom:4px">Mode</label>
-            <select id="quiz-mode-select" style="width:100%">
-                <option value="original_to_translated" ${mode === "original_to_translated" ? "selected" : ""}>Original → Translated</option>
-                <option value="translated_to_original" ${mode === "translated_to_original" ? "selected" : ""}>Translated → Original</option>
-            </select>
-        </div>
-        <div style="flex:1">
-             <label style="font-weight:600; display:block; margin-bottom:4px">Validation</label>
-             <label style="display:flex; align-items:center; gap:8px; margin-top:8px">
-                <input type="checkbox" id="quiz-strictness-check" ${strictness ? "checked" : ""}>
-                Strict Matching (Accents)
-             </label>
-        </div>
-    `;
-  container.appendChild(settingsDiv);
+  // Mode Toggle
+  const toggle = document.createElement("div");
+  toggle.className = "quiz-mode-toggle";
+  toggle.innerHTML = `
+      <div class="quiz-mode-indicator"></div>
+      <div class="quiz-mode-option ${mode === "original_to_translated" ? "active" : ""}" data-val="original_to_translated">Original → Translated</div>
+      <div class="quiz-mode-option ${mode === "translated_to_original" ? "active" : ""}" data-val="translated_to_original">Translated → Original</div>
+  `;
+  quizContainer.appendChild(toggle);
 
-  // Event Listeners for Settings
-  settingsDiv.querySelector("#quiz-mode-select").onchange = async (e) => {
-    await storage.set("quiz_mode", e.target.value);
+  // Toggle Logic
+  const updateToggle = (val) => {
+    const indicator = toggle.querySelector(".quiz-mode-indicator");
+    const opts = toggle.querySelectorAll(".quiz-mode-option");
+
+    opts.forEach((o) => {
+      if (o.dataset.val === val) o.classList.add("active");
+      else o.classList.remove("active");
+    });
+
+    if (val === "original_to_translated") {
+      indicator.style.transform = "translateX(0)";
+    } else {
+      indicator.style.transform = "translateX(100%)";
+    }
+  };
+
+  // Initial position
+  setTimeout(() => updateToggle(mode), 0);
+
+  toggle.onclick = async (e) => {
+    const target = e.target.closest(".quiz-mode-option");
+    if (!target) return;
+
+    const newVal = target.dataset.val;
+    await storage.set("quiz_mode", newVal);
+    updateToggle(newVal);
     loadQuestion();
   };
-  settingsDiv.querySelector("#quiz-strictness-check").onchange = async (e) => {
-    await storage.set("quiz_strictness", e.target.checked);
-  };
-
-  // Quiz Area
-  const quizArea = document.createElement("div");
-  quizArea.className = "quiz-container";
-  quizArea.style.maxWidth = "600px";
-  quizArea.style.margin = "0 auto";
-  container.appendChild(quizArea);
 
   const translations = (await storage.get("translations")) || [];
 
   if (translations.length === 0) {
-    quizArea.innerHTML = `<div style="text-align:center; color:var(--text-muted); margin-top:40px;">
-            No translations saved yet. Use the Translate tool in the reader to build your vocabulary!
-        </div>`;
+    const emptyMsg = document.createElement("div");
+    emptyMsg.style.textAlign = "center";
+    emptyMsg.style.color = "var(--text-muted)";
+    emptyMsg.style.marginTop = "40px";
+    emptyMsg.innerHTML =
+      "No translations saved yet. Use the Translate tool in the reader to build your vocabulary!";
+    quizContainer.appendChild(emptyMsg);
     return;
   }
+
+  // Quiz Card Area
+  const cardArea = document.createElement("div");
+  cardArea.className = "quiz-card";
+  quizContainer.appendChild(cardArea);
 
   let currentItem = null;
 
@@ -327,25 +412,23 @@ async function renderQuizContent(container, storage, ui) {
         ? currentItem.original
         : currentItem.translated;
 
-    quizArea.innerHTML = `
-            <div style="text-align:center; margin-bottom:10px; color:var(--text-muted)">
-                Total Entries: ${translations.length}
+    cardArea.innerHTML = `
+            <div style="text-align:center; margin-bottom:10px; color:var(--text-muted); font-size:0.9rem; text-transform:uppercase; letter-spacing:1px;">
+                Entry ${translations.indexOf(currentItem) + 1} / ${translations.length}
             </div>
-            <div class="quiz-card">
-                <div class="quiz-question">${questionText}</div>
-                <input type="text" class="quiz-input" placeholder="Type your answer..." autocomplete="off">
-                <div class="quiz-controls">
-                    <button class="btn btn-outline" id="btn-skip">Skip</button>
-                    <button class="btn btn-primary" id="btn-check">Check</button>
-                </div>
-                <div class="quiz-feedback" style="display:none"></div>
+            <div class="quiz-question">${questionText}</div>
+            <input type="text" class="quiz-input" placeholder="Type your answer..." autocomplete="off">
+            <div class="quiz-controls">
+                <button class="btn btn-outline" id="btn-skip">Skip</button>
+                <button class="btn btn-primary" id="btn-check">Check Answer</button>
             </div>
+            <div class="quiz-feedback" style="display:none"></div>
         `;
 
-    const input = quizArea.querySelector("input");
-    const btnCheck = quizArea.querySelector("#btn-check");
-    const btnSkip = quizArea.querySelector("#btn-skip");
-    const feedback = quizArea.querySelector(".quiz-feedback");
+    const input = cardArea.querySelector("input");
+    const btnCheck = cardArea.querySelector("#btn-check");
+    const btnSkip = cardArea.querySelector("#btn-skip");
+    const feedback = cardArea.querySelector(".quiz-feedback");
 
     input.focus();
 
@@ -353,6 +436,7 @@ async function renderQuizContent(container, storage, ui) {
       const userAns = input.value.trim();
       if (!userAns) return;
 
+      // Use storage for strictness setting
       const isStrict = (await storage.get("quiz_strictness")) !== false;
       const targetAns =
         currentMode === "original_to_translated"
@@ -376,15 +460,17 @@ async function renderQuizContent(container, storage, ui) {
       if (correct) {
         feedback.className = "quiz-feedback correct";
         feedback.textContent = "Correct! Great job.";
-        btnCheck.textContent = "Next";
+        btnCheck.textContent = "Next Question";
         btnCheck.onclick = loadQuestion;
         btnSkip.style.display = "none";
+        input.disabled = true;
       } else {
         feedback.className = "quiz-feedback incorrect";
-        feedback.innerHTML = `Incorrect. The answer was: <br><strong>${targetAns}</strong>`;
-        btnCheck.textContent = "Next";
+        feedback.innerHTML = `Incorrect. The answer was: <br><strong style="font-size:1.2rem; display:block; margin-top:8px;">${targetAns}</strong>`;
+        btnCheck.textContent = "Next Question";
         btnCheck.onclick = loadQuestion;
         btnSkip.style.display = "none";
+        input.disabled = true;
       }
     };
 
@@ -393,7 +479,7 @@ async function renderQuizContent(container, storage, ui) {
 
     input.onkeydown = (e) => {
       if (e.key === "Enter") {
-        if (btnCheck.textContent === "Next") loadQuestion();
+        if (btnCheck.textContent.includes("Next")) loadQuestion();
         else checkAnswer();
       }
     };

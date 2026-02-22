@@ -99,9 +99,8 @@ export function activate(context) {
             .quiz-mode-toggle {
                 display: flex;
                 background: var(--bg-card);
-                border: 1px solid var(--border);
+                border: 3px solid var(--border);
                 border-radius: 9999px;
-                padding: 4px;
                 margin-bottom: 30px;
                 position: relative;
                 cursor: pointer;
@@ -121,15 +120,20 @@ export function activate(context) {
             }
             .quiz-mode-indicator {
                 position: absolute;
-                top: 4px;
-                bottom: 4px;
-                left: 4px;
+                top: 0;
+                bottom: 0;
                 width: 50%; /* Approximate, will calculate */
                 background: var(--bg-body);
                 border-radius: 9999px;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.1);
                 transition: transform 0.2s ease;
                 z-index: 1;
+            }
+
+            /* Quiz View Override */
+            #article-list.quiz-view {
+                display: block !important;
+                padding: 0 !important;
             }
         `;
     document.head.appendChild(style);

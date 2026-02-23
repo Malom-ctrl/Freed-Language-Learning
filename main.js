@@ -228,6 +228,104 @@ export function activate(context) {
             </div>`;
   });
 
+  // Helper to fetch dictionary data
+  const fetchDictionary = async (word) => {
+    try {
+      const res = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      return Array.isArray(data) ? data[0] : null;
+    } catch (e) {
+      console.error("Dictionary fetch failed", e);
+      return null;
+    }
+  };
+
+  // Pronounce Tool
+  ui.reader.addTool({
+    id: "tool-pronounce",
+    label: "Pronounce",
+    icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>',
+    onClick: async (text, range) => {
+      const word = text.trim();
+      if (word.split(/\s+/).length > 1) {
+        ui.toast("Please select a single word.");
+        return;
+      }
+
+      const data = await fetchDictionary(word);
+      if (!data) {
+        ui.toast("Pronunciation not found.");
+        return;
+      }
+
+      const phonetic =
+        data.phonetics.find((p) => p.audio && p.text) ||
+        data.phonetics.find((p) => p.audio) ||
+        {};
+      const audioUrl = phonetic.audio;
+      const textPron = phonetic.text || data.phonetic || "";
+
+      if (!audioUrl && !textPron) {
+        ui.toast("No pronunciation data available.");
+        return;
+      }
+
+      const html = `
+        <div style="display:flex; align-items:center; gap:10px; padding-right: 20px;">
+            ${
+              audioUrl
+                ? `
+            <button onclick="new Audio('${audioUrl}').play()" style="background:var(--primary); color:white; border:none; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </button>`
+                : ""
+            }
+            <span style="font-family:var(--font-mono); font-size:1.1rem;">${textPron}</span>
+        </div>
+      `;
+
+      const rect = range.getBoundingClientRect();
+      ui.popover.show(rect, html);
+    },
+  });
+
+  // Definition Tool
+  ui.reader.addTool({
+    id: "tool-define",
+    label: "Define",
+    icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>',
+    onClick: async (text, range) => {
+      const word = text.trim();
+      if (word.split(/\s+/).length > 1) {
+        ui.toast("Please select a single word.");
+        return;
+      }
+
+      const data = await fetchDictionary(word);
+      if (!data || !data.meanings) {
+        ui.toast("Definition not found.");
+        return;
+      }
+
+      let html = `<div style="max-height:200px; overflow-y:auto; padding-right: 5px;">`;
+      html += `<h4 style="margin:0 0 8px 0; text-transform:capitalize;">${data.word}</h4>`;
+
+      data.meanings.slice(0, 3).forEach((m) => {
+        html += `<div style="margin-bottom:8px;">
+            <span style="font-size:0.8rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; margin-right:4px;">${m.partOfSpeech}</span>
+            <span>${m.definitions[0].definition}</span>
+          </div>`;
+      });
+      html += `</div>`;
+
+      const rect = range.getBoundingClientRect();
+      ui.popover.show(rect, html);
+    },
+  });
+
   // 3. Reader Tool
   ui.reader.addTool({
     id: "tool-translate",

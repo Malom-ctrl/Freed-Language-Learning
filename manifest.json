@@ -1,8 +1,8 @@
 {
   "id": "io.github.malom-ctrl.LanguageLearning",
   "name": "Language Learning",
-  "version": "0.3.4",
-  "compatibleAppVersion": ">=1.3.6",
+  "version": "0.3.5",
+  "compatibleAppVersion": ">=1.3.7",
   "description": "Translate text and learn languages.",
   "main": "main.js"
 }

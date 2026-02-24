@@ -254,11 +254,28 @@ export function activate(context) {
             </div>`;
   });
 
+  // Language Map
+  const LANG_MAP = {
+    english: "en",
+    spanish: "es",
+    french: "fr",
+    german: "de",
+    italian: "it",
+    portuguese: "pt-BR",
+    "brazilian portuguese": "pt-BR",
+    russian: "ru",
+    japanese: "ja",
+    korean: "ko",
+    hindi: "hi",
+    arabic: "ar",
+    turkish: "tr",
+  };
+
   // Helper to fetch dictionary data
-  const fetchDictionary = async (word) => {
+  const fetchDictionary = async (word, lang = "en") => {
     // Check Cache
     const cacheEnabled = (await storage.get("cache_definitions")) !== false;
-    const cacheKey = `def:${word.toLowerCase()}`;
+    const cacheKey = `def:${lang}:${word.toLowerCase()}`;
 
     if (cacheEnabled) {
       const cached = await storage.get(cacheKey);
@@ -267,7 +284,7 @@ export function activate(context) {
 
     try {
       const res = await fetch(
-        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+        `https://api.dictionaryapi.dev/api/v2/entries/${lang}/${encodeURIComponent(word)}`,
       );
       if (!res.ok) return null;
       const data = await res.json();
@@ -291,12 +308,37 @@ export function activate(context) {
     shouldShow: (text) => text.trim().split(/\s+/).length === 1,
     onClick: async (text, range) => {
       const word = text.trim();
-      const data = await fetchDictionary(word);
 
-      if (!data) {
-        ui.toast("Definition not found.");
+      // Detect Language
+      let lang = "en";
+      try {
+        const guid = reader.getCurrentGuid();
+        if (!guid) throw new Error("No guid");
+        const article = await data.getArticle(guid);
+        if (!article || !article.feedId)
+          throw new Error("No article or feedId");
+        const feed = await data.getFeed(article.feedId);
+        if (!feed || !feed.tags) throw new Error("No feed or tags");
+
+        for (const tag of feed.tags) {
+          const lower = tag.toLowerCase();
+          if (LANG_MAP[lower]) {
+            lang = LANG_MAP[lower];
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to detect language, defaulting to en", e);
+      }
+
+      const dataRes = await fetchDictionary(word, lang);
+
+      if (!dataRes) {
+        ui.toast(`Definition not found (${lang}).`);
         return;
       }
+
+      const data = dataRes; // Alias for easier usage below
 
       // Extract Phonetics
       const phonetic =

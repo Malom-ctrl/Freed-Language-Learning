@@ -9,7 +9,7 @@ export function activate(context) {
     const link = document.createElement("link");
     link.id = styleId;
     link.rel = "stylesheet";
-    link.href = "./plugins/LanguageLearning/styles.css";
+    link.href = "./styles.css";
     document.head.appendChild(link);
   }
 

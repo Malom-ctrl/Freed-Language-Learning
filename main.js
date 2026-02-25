@@ -423,53 +423,28 @@ export function activate(context) {
     },
     {
       shouldMerge: true,
-      mergeStrategy: (overlapping, newCAD) => {
-        const cadId = newCAD.id;
+      mergeStrategy: async (overlapping, newCAD) => {
+        // newCAD.originalContent is now the FULL merged content
+        const targetLang = (await storage.get("target_lang")) || "en";
 
-        // Async update to handle translation after merge is committed
-        (async () => {
-          // Wait for ReaderService to finish saving
-          await new Promise((resolve) => setTimeout(resolve, 100));
+        // Perform translation on the full content
+        const translatedText = await performTranslation(
+          newCAD.originalContent,
+          targetLang,
+        );
 
-          try {
-            const guid = reader.getCurrentGuid();
-            if (!guid) return;
-            const article = await data.getArticle(guid);
-            if (!article || !article.cads) return;
+        if (translatedText) {
+          // Update stats
+          await updateTranslationStats(newCAD.originalContent);
 
-            const cad = article.cads.find((c) => c.id === cadId);
-            if (!cad) return;
+          return {
+            translatedText: translatedText,
+            targetLang: targetLang,
+          };
+        }
 
-            // Now cad.originalContent should be the full merged text
-            const targetLang = (await storage.get("target_lang")) || "en";
-            const translatedText = await performTranslation(
-              cad.originalContent,
-              targetLang,
-            );
-
-            if (translatedText) {
-              cad.data = {
-                translatedText: translatedText,
-                targetLang: targetLang,
-              };
-
-              // Update stats
-              await updateTranslationStats(cad.originalContent);
-
-              // Save and refresh
-              await data.saveArticle(article);
-              app.refresh();
-            }
-          } catch (e) {
-            console.error("Async merge translation failed", e);
-          }
-        })();
-
-        // Return temporary state
-        return {
-          translatedText: "Translating...",
-          targetLang: "...",
-        };
+        // Fallback
+        return newCAD.data;
       },
     },
   );

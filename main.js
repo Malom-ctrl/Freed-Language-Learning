@@ -192,18 +192,16 @@ export function activate(context) {
         return;
       }
 
-      const data = dataRes; // Alias for easier usage below
-
       // Extract Phonetics
       const phonetic =
-        data.phonetics.find((p) => p.audio && p.text) ||
-        data.phonetics.find((p) => p.audio) ||
+        dataRes.phonetics.find((p) => p.audio && p.text) ||
+        dataRes.phonetics.find((p) => p.audio) ||
         {};
       const audioUrl = phonetic.audio;
-      const textPron = phonetic.text || data.phonetic || "";
+      const textPron = phonetic.text || dataRes.phonetic || "";
 
       // Sanitize Data
-      const safeWord = DOMPurify.sanitize(data.word);
+      const safeWord = DOMPurify.sanitize(dataRes.word);
       const safePron = DOMPurify.sanitize(textPron);
 
       let html = `<div class="dictionary-popover-container">`;
@@ -227,8 +225,8 @@ export function activate(context) {
       `;
 
       // Meanings
-      if (data.meanings && data.meanings.length > 0) {
-        data.meanings.forEach((m) => {
+      if (dataRes.meanings && dataRes.meanings.length > 0) {
+        dataRes.meanings.forEach((m) => {
           const safePos = DOMPurify.sanitize(m.partOfSpeech);
           html += `<div class="dictionary-meaning">
                 <div class="dictionary-pos">${safePos}</div>
@@ -250,9 +248,9 @@ export function activate(context) {
       }
 
       // Source
-      if (data.sourceUrls && data.sourceUrls.length > 0) {
+      if (dataRes.sourceUrls && dataRes.sourceUrls.length > 0) {
         html += `<div class="dictionary-source">
-            Source: <a href="${data.sourceUrls[0]}" target="_blank">Wiktionary</a>
+            Source: <a href="${dataRes.sourceUrls[0]}" target="_blank">Wiktionary</a>
           </div>`;
       }
 

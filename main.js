@@ -9,7 +9,7 @@ export function activate(context) {
     const link = document.createElement("link");
     link.id = styleId;
     link.rel = "stylesheet";
-    link.href = "./styles.css";
+    link.href = new URL("./styles.css", import.meta.url).href;
     document.head.appendChild(link);
   }
 

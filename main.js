@@ -3,16 +3,6 @@ import DOMPurify from "dompurify";
 export function activate(context) {
   const { ui, data, app, reader, storage } = context;
 
-  // 0. Inject Styles
-  const styleId = "plugin-translation-styles";
-  if (!document.getElementById(styleId)) {
-    const link = document.createElement("link");
-    link.id = styleId;
-    link.rel = "stylesheet";
-    link.href = new URL("./styles.css", import.meta.url).href;
-    document.head.appendChild(link);
-  }
-
   // 1. Settings (Target Language)
   ui.settings.addSection("tab-general", "Translation", async (container) => {
     const label = document.createElement("label");

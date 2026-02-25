@@ -313,11 +313,65 @@ export function activate(context) {
     },
   });
 
+  // Helper for translation logic
+  const performTranslation = async (text, targetLang) => {
+    try {
+      const pair = `Autodetect|${targetLang}`;
+      const res = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`,
+      );
+      const apiData = await res.json();
+
+      const translatedText =
+        apiData.responseStatus === 200
+          ? apiData.responseData.translatedText
+          : null;
+
+      return translatedText;
+    } catch (e) {
+      console.error("Translation API failed", e);
+      return null;
+    }
+  };
+
+  // Helper to update stats
+  const updateTranslationStats = async (text) => {
+    const guid = reader.getCurrentGuid();
+    if (guid) {
+      const article = await data.getArticle(guid);
+      if (article && article.feedId) {
+        const wordCount = text.trim().split(/\s+/).length;
+        await data.stats.update(
+          article.feedId,
+          "wordCountTranslated",
+          wordCount,
+        );
+        app.refresh();
+      }
+    }
+  };
+
   // 3. Reader Tool
   ui.reader.addTool({
     id: "tool-translate",
     label: "Translate",
     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"></path><path d="m4 14 6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="m22 22-5-10-5 10"></path><path d="M14 18h6"></path></svg>',
+    mergeStrategy: async (oldData, newContent) => {
+      // Re-run translation logic for the merged content
+      const targetLang = (await storage.get("target_lang")) || "en";
+
+      const translatedText = await performTranslation(newContent, targetLang);
+
+      if (translatedText) {
+        await updateTranslationStats(newContent);
+
+        return {
+          translatedText: translatedText,
+          targetLang: targetLang,
+        };
+      }
+      return oldData; // Fallback
+    },
     onClick: async (text, range) => {
       if (!text) return;
 
@@ -325,20 +379,12 @@ export function activate(context) {
 
       await ui.reader.createCAD("translation", async (selectedText) => {
         try {
-          const lang = targetLang;
-          const pair = `Autodetect|${lang}`;
-
           ui.toast("Translating...");
 
-          const res = await fetch(
-            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(selectedText)}&langpair=${pair}`,
+          const translatedText = await performTranslation(
+            selectedText,
+            targetLang,
           );
-          const apiData = await res.json();
-
-          const translatedText =
-            apiData.responseStatus === 200
-              ? apiData.responseData.translatedText
-              : null;
 
           if (translatedText) {
             ui.toast("Translation ready");
@@ -366,19 +412,7 @@ export function activate(context) {
             }
 
             // Update Stats
-            const guid = reader.getCurrentGuid();
-            if (guid) {
-              const article = await data.getArticle(guid);
-              if (article && article.feedId) {
-                const wordCount = selectedText.trim().split(/\s+/).length;
-                await data.stats.update(
-                  article.feedId,
-                  "wordCountTranslated",
-                  wordCount,
-                );
-                app.refresh();
-              }
-            }
+            await updateTranslationStats(selectedText);
 
             return {
               translatedText: translatedText,

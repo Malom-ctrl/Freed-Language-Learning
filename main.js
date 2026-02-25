@@ -356,54 +356,6 @@ export function activate(context) {
     id: "tool-translate",
     label: "Translate",
     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"></path><path d="m4 14 6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="m22 22-5-10-5 10"></path><path d="M14 18h6"></path></svg>',
-    mergeStrategy: (overlapping, newCAD) => {
-      const cadId = newCAD.id;
-
-      // Async update to handle translation after merge is committed
-      (async () => {
-        // Wait for ReaderService to finish saving
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        try {
-          const guid = reader.getCurrentGuid();
-          if (!guid) return;
-          const article = await data.getArticle(guid);
-          if (!article || !article.cads) return;
-
-          const cad = article.cads.find((c) => c.id === cadId);
-          if (!cad) return;
-
-          // Now cad.originalContent should be the full merged text
-          const targetLang = (await storage.get("target_lang")) || "en";
-          const translatedText = await performTranslation(
-            cad.originalContent,
-            targetLang,
-          );
-
-          if (translatedText) {
-            cad.data = {
-              translatedText: translatedText,
-              targetLang: targetLang,
-            };
-
-            // Update stats
-            await updateTranslationStats(cad.originalContent);
-
-            // Save and refresh
-            await data.saveArticle(article);
-            app.refresh();
-          }
-        } catch (e) {
-          console.error("Async merge translation failed", e);
-        }
-      })();
-
-      // Return temporary state
-      return {
-        translatedText: "Translating...",
-        targetLang: "...",
-      };
-    },
     onClick: async (text, range) => {
       if (!text) return;
 
@@ -463,10 +415,64 @@ export function activate(context) {
   });
 
   // 4. Register CAD Renderer
-  ui.reader.addCADRenderer("translation", (content, data) => {
-    const translated = data.data?.translatedText || "Translation unavailable";
-    return `<span class="translated-text" data-tooltip="${translated}" data-cad-id="${data.id}">${content}</span>`;
-  });
+  ui.reader.addCADRenderer(
+    "translation",
+    (content, data) => {
+      const translated = data.data?.translatedText || "Translation unavailable";
+      return `<span class="translated-text" data-tooltip="${translated}" data-cad-id="${data.id}">${content}</span>`;
+    },
+    {
+      shouldMerge: true,
+      mergeStrategy: (overlapping, newCAD) => {
+        const cadId = newCAD.id;
+
+        // Async update to handle translation after merge is committed
+        (async () => {
+          // Wait for ReaderService to finish saving
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          try {
+            const guid = reader.getCurrentGuid();
+            if (!guid) return;
+            const article = await data.getArticle(guid);
+            if (!article || !article.cads) return;
+
+            const cad = article.cads.find((c) => c.id === cadId);
+            if (!cad) return;
+
+            // Now cad.originalContent should be the full merged text
+            const targetLang = (await storage.get("target_lang")) || "en";
+            const translatedText = await performTranslation(
+              cad.originalContent,
+              targetLang,
+            );
+
+            if (translatedText) {
+              cad.data = {
+                translatedText: translatedText,
+                targetLang: targetLang,
+              };
+
+              // Update stats
+              await updateTranslationStats(cad.originalContent);
+
+              // Save and refresh
+              await data.saveArticle(article);
+              app.refresh();
+            }
+          } catch (e) {
+            console.error("Async merge translation failed", e);
+          }
+        })();
+
+        // Return temporary state
+        return {
+          translatedText: "Translating...",
+          targetLang: "...",
+        };
+      },
+    },
+  );
 
   // 5. Add Sidebar Item
   ui.sidebar.addPrimary({

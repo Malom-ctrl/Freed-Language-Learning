@@ -8,9 +8,15 @@
 }
 
 @keyframes pulse-underline {
-    0% { border-color: rgba(79, 70, 229, 0.3); }
-    50% { border-color: rgba(79, 70, 229, 1); }
-    100% { border-color: rgba(79, 70, 229, 0.3); }
+    0% {
+        border-color: rgba(79, 70, 229, 0.3);
+    }
+    50% {
+        border-color: rgba(79, 70, 229, 1);
+    }
+    100% {
+        border-color: rgba(79, 70, 229, 0.3);
+    }
 }
 
 .translated-text {
@@ -44,7 +50,9 @@
     margin-top: 20px;
     width: 100%;
     max-width: 600px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .quiz-question {
@@ -141,7 +149,7 @@
     width: 50%;
     background: var(--bg-body);
     border-radius: 9999px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     transition: transform 0.2s ease;
     z-index: 1;
 }
@@ -226,7 +234,7 @@
 
 .play-audio-btn {
     background: var(--primary);
-    color: white;
+    color: var(--text-inverse);
     border: none;
     border-radius: 50%;
     width: 28px;
